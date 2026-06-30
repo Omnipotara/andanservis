@@ -76,6 +76,25 @@ button {
   box-shadow: 0 0 0 3px rgb(217 35 46 / 0.16);
 }
 
+.field-dark {
+  color: rgb(255 255 255 / 0.66);
+}
+
+.field-dark input,
+.field-dark select,
+.field-dark textarea {
+  border-color: rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.08);
+  color: #fff;
+}
+
+.field-dark input:focus,
+.field-dark select:focus,
+.field-dark textarea:focus {
+  border-color: #5fb49c;
+  box-shadow: 0 0 0 3px rgb(95 180 156 / 0.16);
+}
+
 .status {
   display: inline-flex;
   min-height: 1.65rem;

@@ -1,10 +1,11 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowRight,
   CalendarCheck,
   Check,
   Clock3,
   Gauge,
+  LogOut,
   MapPin,
   Menu,
   Phone,
@@ -15,8 +16,28 @@ import {
 } from 'lucide-react';
 import heroImage from './assets/workshop-hero.png';
 import { initialAppointments } from './data/appointments';
-import { businessDetails, businessSettings, services } from './data/business';
-import type { AppointmentRequest } from './types/booking';
+import {
+  businessDetails,
+  businessSettings as fallbackBusinessSettings,
+  services as fallbackServices,
+} from './data/business';
+import {
+  getCurrentAdminUser,
+  signInAdmin,
+  signOutAdmin,
+  type AdminUser,
+} from './services/authService';
+import {
+  approveAppointmentRequest,
+  createAppointmentRequest,
+  getAdminAppointments,
+  getApprovedAppointmentSlots,
+  getBusinessSettings,
+  getServices,
+  isSupabaseConfigured,
+  rejectAppointmentRequest,
+} from './services/bookingService';
+import type { AppointmentRequest, BusinessSettings, Service } from './types/booking';
 import {
   appointmentsConflict,
   formatPrice,
@@ -29,11 +50,30 @@ const navItems = [
   { id: 'pocetna', label: 'Početna' },
   { id: 'usluge', label: 'Usluge' },
   { id: 'zakazivanje', label: 'Zakazivanje' },
-  { id: 'admin', label: 'Admin' },
   { id: 'kontakt', label: 'Kontakt' },
 ];
 
-const today = new Date('2026-07-02').toISOString().slice(0, 10);
+const adminPath = '/andanadminstrana';
+
+const heroHighlights = [
+  {
+    title: 'Fiksne cene',
+    text: 'Cene su jasne pre slanja zahteva.',
+    icon: ShieldCheck,
+  },
+  {
+    title: 'Kontrola termina',
+    text: 'Termin je zauzet tek kada ga admin odobri.',
+    icon: CalendarCheck,
+  },
+  {
+    title: 'Lokalni servis',
+    text: 'Fokus na Novu Pazovu i okolinu.',
+    icon: MapPin,
+  },
+];
+
+const today = new Date().toISOString().slice(0, 10);
 
 type BookingForm = {
   serviceId: string;
@@ -48,8 +88,13 @@ type BookingForm = {
   notes: string;
 };
 
+type AdminLoginForm = {
+  email: string;
+  password: string;
+};
+
 const emptyForm: BookingForm = {
-  serviceId: services[0]?.id ?? '',
+  serviceId: fallbackServices[0]?.id ?? '',
   requestedDate: today,
   requestedTime: '',
   customerName: '',
@@ -61,23 +106,112 @@ const emptyForm: BookingForm = {
   notes: '',
 };
 
+const emptyAdminLoginForm: AdminLoginForm = {
+  email: '',
+  password: '',
+};
+
 const scrollToSection = (id: string) => {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
 function App() {
+  const isAdminRoute = window.location.pathname === adminPath;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [appServices, setAppServices] = useState<Service[]>(fallbackServices);
+  const [businessSettings, setBusinessSettings] =
+    useState<BusinessSettings>(fallbackBusinessSettings);
   const [appointments, setAppointments] = useState<AppointmentRequest[]>(initialAppointments);
+  const [availabilityAppointments, setAvailabilityAppointments] =
+    useState<AppointmentRequest[]>(initialAppointments);
   const [form, setForm] = useState<BookingForm>(emptyForm);
-  const selectedService = services.find((service) => service.id === form.serviceId) ?? services[0];
+  const [backendStatus, setBackendStatus] = useState(
+    isSupabaseConfigured ? 'Povezivanje sa Supabase bazom...' : 'Mock podaci su aktivni.',
+  );
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [adminForm, setAdminForm] = useState<AdminLoginForm>(emptyAdminLoginForm);
+  const [adminStatus, setAdminStatus] = useState(
+    isSupabaseConfigured
+      ? 'Prijavi se kao admin da vidiš i odobravaš zahteve.'
+      : 'Mock admin panel je aktivan jer Supabase nije konfigurisan.',
+  );
+  const [isAdminSubmitting, setIsAdminSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const selectedService =
+    appServices.find((service) => service.id === form.serviceId) ?? appServices[0];
+  const canManageAppointments = !isSupabaseConfigured || Boolean(adminUser);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadBookingData = async () => {
+      if (!isSupabaseConfigured) {
+        return;
+      }
+
+      try {
+        const [remoteServices, remoteSettings, approvedSlots] = await Promise.all([
+          getServices(),
+          getBusinessSettings(),
+          getApprovedAppointmentSlots(),
+        ]);
+        const adminAppointments = await getAdminAppointments().catch(() => null);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setAppServices(remoteServices);
+        setBusinessSettings(remoteSettings);
+        setAppointments(adminAppointments ?? initialAppointments);
+        setAvailabilityAppointments(adminAppointments ?? approvedSlots);
+        setForm((current) => ({
+          ...current,
+          serviceId: remoteServices[0]?.id ?? current.serviceId,
+        }));
+        setBackendStatus('Supabase je povezan. Javna dostupnost radi.');
+        setAdminStatus(
+          adminAppointments
+            ? 'Admin sesija je aktivna. Zahtevi su učitani iz baze.'
+            : 'Prijavi se kao admin da vidiš i odobravaš zahteve.',
+        );
+
+        const currentAdmin = await getCurrentAdminUser();
+
+        if (currentAdmin && isMounted) {
+          const signedInAppointments = await getAdminAppointments();
+          setAdminUser(currentAdmin);
+          setAppointments(signedInAppointments);
+          setAvailabilityAppointments(signedInAppointments);
+          setAdminStatus('Admin sesija je aktivna. Zahtevi su učitani iz baze.');
+        }
+      } catch {
+        if (isMounted) {
+          setBackendStatus('Supabase nije dostupan. Prikazani su lokalni mock podaci.');
+        }
+      }
+    };
+
+    void loadBookingData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const availableSlots = useMemo(() => {
     if (!selectedService) {
       return [];
     }
 
-    return getAvailableSlots(selectedService, form.requestedDate, appointments);
-  }, [appointments, form.requestedDate, selectedService]);
+    return getAvailableSlots(
+      selectedService,
+      form.requestedDate,
+      availabilityAppointments,
+      businessSettings,
+      appServices,
+    );
+  }, [appServices, availabilityAppointments, businessSettings, form.requestedDate, selectedService]);
 
   const pendingCount = appointments.filter((appointment) => appointment.status === 'pending').length;
   const approvedCount = appointments.filter((appointment) => appointment.status === 'approved').length;
@@ -90,8 +224,59 @@ function App() {
     }));
   };
 
-  const submitRequest = (event: FormEvent<HTMLFormElement>) => {
+  const updateAdminForm = (key: keyof AdminLoginForm, value: string) => {
+    setAdminForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const refreshAdminAppointments = async () => {
+    const remoteAppointments = await getAdminAppointments();
+    setAppointments(remoteAppointments);
+    setAvailabilityAppointments(remoteAppointments);
+  };
+
+  const submitAdminLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setIsAdminSubmitting(true);
+    setAdminStatus('Prijava je u toku...');
+
+    try {
+      const admin = await signInAdmin(adminForm.email, adminForm.password);
+
+      if (!admin) {
+        throw new Error('Supabase nije konfigurisan.');
+      }
+
+      setAdminUser(admin);
+      setAdminForm(emptyAdminLoginForm);
+      await refreshAdminAppointments();
+      setAdminStatus('Admin je prijavljen. Zahtevi su učitani iz baze.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Prijava nije uspela.';
+      setAdminStatus(message);
+    } finally {
+      setIsAdminSubmitting(false);
+    }
+  };
+
+  const handleAdminSignOut = async () => {
+    try {
+      await signOutAdmin();
+      setAdminUser(null);
+      setAdminStatus('Odjavljen si. Prijavi se kao admin za upravljanje zahtevima.');
+      const approvedSlots = await getApprovedAppointmentSlots();
+      setAppointments(initialAppointments);
+      setAvailabilityAppointments(approvedSlots);
+    } catch {
+      setAdminStatus('Odjava nije uspela. Pokušaj ponovo.');
+    }
+  };
+
+  const submitRequest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSubmitting(true);
 
     const request: AppointmentRequest = {
       id: `REQ-${Math.floor(2000 + Math.random() * 7000)}`,
@@ -109,14 +294,43 @@ function App() {
       createdAt: new Date().toISOString(),
     };
 
-    setAppointments((current) => [request, ...current]);
-    setForm(emptyForm);
+    try {
+      await createAppointmentRequest(request);
+      setAppointments((current) => [request, ...current]);
+      setAvailabilityAppointments((current) => [request, ...current]);
+      setForm((current) => ({
+        ...emptyForm,
+        serviceId: appServices[0]?.id ?? current.serviceId,
+        requestedDate: today,
+      }));
+      setBackendStatus(
+        isSupabaseConfigured
+          ? 'Zahtev je poslat u Supabase i čeka odobrenje.'
+          : 'Mock zahtev je dodat lokalno.',
+      );
+    } catch {
+      setBackendStatus('Zahtev nije poslat. Proveri Supabase podešavanja i RLS politike.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const approveAppointment = (appointmentId: string) => {
+  const approveAppointment = async (appointmentId: string) => {
     const approved = appointments.find((appointment) => appointment.id === appointmentId);
 
     if (!approved) {
+      return;
+    }
+
+    try {
+      await approveAppointmentRequest(appointmentId);
+      if (isSupabaseConfigured) {
+        await refreshAdminAppointments();
+        setBackendStatus('Zahtev je odobren. Konfliktni pending zahtevi su odbijeni.');
+        return;
+      }
+    } catch {
+      setBackendStatus('Odobravanje nije uspelo. Proveri da li je korisnik admin.');
       return;
     }
 
@@ -126,7 +340,26 @@ function App() {
           return { ...appointment, status: 'approved' };
         }
 
-        if (appointment.status === 'pending' && appointmentsConflict(approved, appointment)) {
+        if (
+          appointment.status === 'pending' &&
+          appointmentsConflict(approved, appointment, appServices, businessSettings)
+        ) {
+          return { ...appointment, status: 'rejected' };
+        }
+
+        return appointment;
+      }),
+    );
+    setAvailabilityAppointments((current) =>
+      current.map((appointment) => {
+        if (appointment.id === appointmentId) {
+          return { ...appointment, status: 'approved' };
+        }
+
+        if (
+          appointment.status === 'pending' &&
+          appointmentsConflict(approved, appointment, appServices, businessSettings)
+        ) {
           return { ...appointment, status: 'rejected' };
         }
 
@@ -135,8 +368,25 @@ function App() {
     );
   };
 
-  const rejectAppointment = (appointmentId: string) => {
+  const rejectAppointment = async (appointmentId: string) => {
+    try {
+      await rejectAppointmentRequest(appointmentId);
+      if (isSupabaseConfigured) {
+        await refreshAdminAppointments();
+        setBackendStatus('Zahtev je odbijen.');
+        return;
+      }
+    } catch {
+      setBackendStatus('Odbijanje nije uspelo. Proveri da li je korisnik admin.');
+      return;
+    }
+
     setAppointments((current) =>
+      current.map((appointment) =>
+        appointment.id === appointmentId ? { ...appointment, status: 'rejected' } : appointment,
+      ),
+    );
+    setAvailabilityAppointments((current) =>
       current.map((appointment) =>
         appointment.id === appointmentId ? { ...appointment, status: 'rejected' } : appointment,
       ),
@@ -149,7 +399,14 @@ function App() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <button
             className="group flex items-center gap-3 text-left"
-            onClick={() => scrollToSection('pocetna')}
+            onClick={() => {
+              if (isAdminRoute) {
+                window.location.href = '/';
+                return;
+              }
+
+              scrollToSection('pocetna');
+            }}
             type="button"
           >
             <span className="grid h-10 w-10 place-items-center rounded-sm bg-ember font-bold">
@@ -164,16 +421,28 @@ function App() {
           </button>
 
           <nav className="hidden items-center gap-1 lg:flex">
-            {navItems.map((item) => (
+            {isAdminRoute ? (
               <button
                 className="px-4 py-2 text-sm font-medium text-white/78 transition hover:text-white"
-                key={item.id}
-                onClick={() => scrollToSection(item.id)}
+                onClick={() => {
+                  window.location.href = '/';
+                }}
                 type="button"
               >
-                {item.label}
+                Javni sajt
               </button>
-            ))}
+            ) : (
+              navItems.map((item) => (
+                <button
+                  className="px-4 py-2 text-sm font-medium text-white/78 transition hover:text-white"
+                  key={item.id}
+                  onClick={() => scrollToSection(item.id)}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              ))
+            )}
           </nav>
 
           <button
@@ -188,12 +457,16 @@ function App() {
 
         {menuOpen && (
           <div className="border-t border-white/10 bg-graphite px-4 py-3 lg:hidden">
-            {navItems.map((item) => (
+            {(isAdminRoute ? [{ id: '/', label: 'Javni sajt' }] : navItems).map((item) => (
               <button
                 className="block w-full px-2 py-3 text-left text-sm text-white/82"
                 key={item.id}
                 onClick={() => {
-                  scrollToSection(item.id);
+                  if (isAdminRoute) {
+                    window.location.href = '/';
+                  } else {
+                    scrollToSection(item.id);
+                  }
                   setMenuOpen(false);
                 }}
                 type="button"
@@ -206,6 +479,8 @@ function App() {
       </header>
 
       <main>
+        {!isAdminRoute && (
+          <>
         <section
           className="relative min-h-[760px] overflow-hidden bg-graphite pt-24 text-white"
           id="pocetna"
@@ -247,14 +522,18 @@ function App() {
             </div>
           </div>
           <div className="relative mx-auto -mt-20 grid max-w-7xl gap-3 px-4 pb-8 sm:grid-cols-3 sm:px-6 lg:px-8">
-            {[
-              ['Fiksne cene', 'Cene su jasne pre slanja zahteva.'],
-              ['Kontrola termina', 'Termin je zauzet tek kada ga admin odobri.'],
-              ['Lokalni servis', 'Fokus na Novu Pazovu i okolinu.'],
-            ].map(([title, text]) => (
-              <div className="border border-white/12 bg-white/8 p-5 backdrop-blur" key={title}>
-                <p className="text-sm font-bold">{title}</p>
-                <p className="mt-2 text-sm leading-6 text-white/68">{text}</p>
+            {heroHighlights.map(({ icon: Icon, text, title }) => (
+              <div
+                className="grid grid-cols-[2.75rem_1fr] gap-4 border border-white/12 bg-white/8 p-5 backdrop-blur"
+                key={title}
+              >
+                <span className="grid h-11 w-11 place-items-center rounded-sm bg-white/10 text-mint">
+                  <Icon aria-hidden="true" size={22} strokeWidth={2.2} />
+                </span>
+                <div>
+                  <p className="text-sm font-bold">{title}</p>
+                  <p className="mt-2 text-sm leading-6 text-white/68">{text}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -269,7 +548,7 @@ function App() {
               </h2>
             </div>
             <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {services.map((service) => (
+              {appServices.map((service) => (
                 <article className="rounded-sm border border-black/10 bg-white p-6 shadow-sm" key={service.id}>
                   <div className="mb-8 flex h-11 w-11 items-center justify-center rounded-sm bg-graphite text-white">
                     {service.id === 'dijagnostika' ? <Gauge size={22} /> : <Wrench size={22} />}
@@ -300,6 +579,9 @@ function App() {
                 Slobodni termini se računaju samo prema odobrenim zakazivanjima. Više klijenata
                 može poslati zahtev za isti termin, a potvrda stiže tek nakon pregleda servisa.
               </p>
+              <p className="mt-4 border-l-2 border-ember pl-4 text-sm font-semibold leading-6 text-black/58">
+                {backendStatus}
+              </p>
               <div className="mt-8 grid gap-3">
                 <InfoRow icon={<Clock3 size={19} />} label="Radno vreme" value={`${businessSettings.workdayStart} - ${businessSettings.workdayEnd}`} />
                 <InfoRow icon={<CalendarCheck size={19} />} label="Buffer" value={`${businessSettings.globalBufferMinutes} min između termina`} />
@@ -312,7 +594,7 @@ function App() {
                 <label className="field md:col-span-2">
                   Usluga
                   <select value={form.serviceId} onChange={(event) => updateForm('serviceId', event.target.value)}>
-                    {services.map((service) => (
+                    {appServices.map((service) => (
                       <option key={service.id} value={service.id}>
                         {service.name} - {formatPrice(service.fixedPrice)}
                       </option>
@@ -372,29 +654,92 @@ function App() {
                   <textarea rows={4} value={form.notes} onChange={(event) => updateForm('notes', event.target.value)} />
                 </label>
               </div>
-              <button className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-sm bg-graphite px-5 text-sm font-bold text-white transition hover:bg-asphalt" type="submit">
-                Pošalji zahtev <ArrowRight size={18} />
+              <button
+                className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-sm bg-graphite px-5 text-sm font-bold text-white transition hover:bg-asphalt disabled:cursor-not-allowed disabled:opacity-55"
+                disabled={isSubmitting}
+                type="submit"
+              >
+                {isSubmitting ? 'Slanje zahteva...' : 'Pošalji zahtev'} <ArrowRight size={18} />
               </button>
             </form>
           </div>
         </section>
 
-        <section className="bg-graphite py-20 text-white" id="admin">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          </>
+        )}
+
+        {isAdminRoute && (
+        <section className="flex min-h-screen items-start justify-center bg-graphite px-4 py-24 text-white sm:px-6 lg:px-8" id="admin">
+          <div className="w-full max-w-5xl">
             <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
               <div>
-                <p className="text-sm font-bold uppercase tracking-[0.24em] text-mint">Admin mock</p>
+                <p className="text-sm font-bold uppercase tracking-[0.24em] text-mint">Admin panel</p>
                 <h2 className="mt-3 text-4xl font-black sm:text-5xl">Pregled zahteva.</h2>
+                <p className="mt-4 max-w-2xl text-sm font-semibold leading-6 text-white/58">
+                  {adminStatus}
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:min-w-80">
-                <Stat label="Na čekanju" value={pendingCount.toString()} />
-                <Stat label="Odobreno" value={approvedCount.toString()} />
-              </div>
+              {canManageAppointments && (
+                <div className="grid grid-cols-2 gap-3 sm:min-w-80">
+                  <Stat label="Na čekanju" value={pendingCount.toString()} />
+                  <Stat label="Odobreno" value={approvedCount.toString()} />
+                </div>
+              )}
             </div>
 
-            <div className="mt-10 grid gap-4">
+            {!canManageAppointments ? (
+              <form
+                className="mx-auto mt-10 grid w-full max-w-xl gap-4 border border-white/12 bg-white/[0.06] p-5 sm:p-7"
+                onSubmit={submitAdminLogin}
+              >
+                <label className="field field-dark">
+                  Admin email
+                  <input
+                    autoComplete="email"
+                    required
+                    type="email"
+                    value={adminForm.email}
+                    onChange={(event) => updateAdminForm('email', event.target.value)}
+                  />
+                </label>
+                <label className="field field-dark">
+                  Lozinka
+                  <input
+                    autoComplete="current-password"
+                    required
+                    type="password"
+                    value={adminForm.password}
+                    onChange={(event) => updateAdminForm('password', event.target.value)}
+                  />
+                </label>
+                <button
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-sm bg-mint px-5 text-sm font-bold text-graphite transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-55"
+                  disabled={isAdminSubmitting}
+                  type="submit"
+                >
+                  {isAdminSubmitting ? 'Prijava...' : 'Prijavi se kao admin'}
+                </button>
+              </form>
+            ) : (
+              <>
+                {adminUser && (
+                  <div className="mt-8 flex flex-col justify-between gap-3 border border-white/12 bg-white/[0.06] p-4 sm:flex-row sm:items-center">
+                    <p className="text-sm font-semibold text-white/68">
+                      Prijavljen admin: <span className="text-white">{adminUser.email}</span>
+                    </p>
+                    <button
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-sm border border-white/12 px-4 text-sm font-bold text-white transition hover:bg-white/10"
+                      onClick={handleAdminSignOut}
+                      type="button"
+                    >
+                      Odjavi se <LogOut size={17} />
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-10 grid gap-4">
               {appointments.map((appointment) => {
-                const service = getService(appointment.serviceId);
+                const service = getService(appointment.serviceId, appServices);
 
                 return (
                   <article className="rounded-sm border border-white/12 bg-white/[0.06] p-5" key={appointment.id}>
@@ -438,11 +783,21 @@ function App() {
                     </div>
                   </article>
                 );
-              })}
-            </div>
+                  })}
+
+                  {appointments.length === 0 && (
+                    <div className="border border-white/12 bg-white/[0.06] p-5 text-sm font-semibold text-white/58">
+                      Trenutno nema zahteva za prikaz.
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </section>
+        )}
 
+        {!isAdminRoute && (
         <section className="bg-paper py-20" id="kontakt">
           <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_1fr] lg:px-8">
             <div>
@@ -460,6 +815,7 @@ function App() {
             </div>
           </div>
         </section>
+        )}
       </main>
     </div>
   );

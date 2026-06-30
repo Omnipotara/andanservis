@@ -1,5 +1,4 @@
-import { businessSettings, services } from '../data/business';
-import type { AppointmentRequest, Service } from '../types/booking';
+import type { AppointmentRequest, BusinessSettings, Service } from '../types/booking';
 
 const timeToMinutes = (time: string) => {
   const [hours, minutes] = time.split(':').map(Number);
@@ -19,11 +18,16 @@ export const formatPrice = (price: number) =>
     maximumFractionDigits: 0,
   }).format(price);
 
-export const getService = (serviceId: string) =>
+export const getService = (serviceId: string, services: Service[]) =>
   services.find((service) => service.id === serviceId);
 
-export const getOccupiedRange = (appointment: AppointmentRequest, service?: Service) => {
-  const appointmentService = service ?? getService(appointment.serviceId);
+export const getOccupiedRange = (
+  appointment: AppointmentRequest,
+  services: Service[],
+  businessSettings: BusinessSettings,
+  service?: Service,
+) => {
+  const appointmentService = service ?? getService(appointment.serviceId, services);
   const start = timeToMinutes(appointment.requestedTime);
   const duration = appointmentService?.durationMinutes ?? 60;
 
@@ -36,13 +40,15 @@ export const getOccupiedRange = (appointment: AppointmentRequest, service?: Serv
 export const appointmentsConflict = (
   appointment: AppointmentRequest,
   candidate: AppointmentRequest,
+  services: Service[],
+  businessSettings: BusinessSettings,
 ) => {
   if (appointment.requestedDate !== candidate.requestedDate) {
     return false;
   }
 
-  const first = getOccupiedRange(appointment);
-  const second = getOccupiedRange(candidate);
+  const first = getOccupiedRange(appointment, services, businessSettings);
+  const second = getOccupiedRange(candidate, services, businessSettings);
 
   return first.start < second.end && second.start < first.end;
 };
@@ -51,6 +57,8 @@ export const getAvailableSlots = (
   service: Service,
   date: string,
   appointments: AppointmentRequest[],
+  businessSettings: BusinessSettings,
+  services: Service[],
 ) => {
   const slots: string[] = [];
   const slotInterval = 30;
@@ -75,7 +83,7 @@ export const getAvailableSlots = (
     };
 
     const blocked = approvedAppointments.some((appointment) =>
-      appointmentsConflict(appointment, candidate),
+      appointmentsConflict(appointment, candidate, services, businessSettings),
     );
 
     if (!blocked) {
