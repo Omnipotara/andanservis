@@ -9,12 +9,13 @@ Fill this file before final production copy and SEO pass. The website should rea
 - Tone: Professional, trustworthy, modern, premium
 
 ## Contact
-- Phone: TBD
+- Phone: +381 63 8207512
 - Email: TBD
 - Address: TBD
 - City: Nova Pazova
 - Country: Serbia
 - Google Maps URL: TBD
+- WhatsApp URL: https://wa.me/381638207512
 
 ## Working Hours
 - Monday: TBD
@@ -25,12 +26,12 @@ Fill this file before final production copy and SEO pass. The website should rea
 - Saturday: TBD
 - Sunday: TBD
 
-## Services And Fixed Prices
+## Services
 Add one row per service.
 
-| Service | Description | Fixed price | Duration | Active |
-| --- | --- | --- | --- | --- |
-| TBD | TBD | TBD | TBD | Yes |
+| Service | Description | Active |
+| --- | --- | --- |
+| Ništa od navedenog | Upit kada klijent nije siguran koju uslugu da izabere. | Yes |
 
 ## Local SEO
 - Primary service area: Nova Pazova

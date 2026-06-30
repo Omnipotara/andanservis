@@ -14,6 +14,7 @@ export type Database = {
           vehicle_brand: string;
           vehicle_model: string;
           vehicle_year: string | null;
+          vehicle_vin: string;
           notes: string | null;
           service_id: string;
           requested_date: string;
@@ -30,6 +31,7 @@ export type Database = {
           vehicle_brand: string;
           vehicle_model: string;
           vehicle_year?: string | null;
+          vehicle_vin: string;
           notes?: string | null;
           service_id: string;
           requested_date: string;
@@ -45,6 +47,7 @@ export type Database = {
           vehicle_brand?: string;
           vehicle_model?: string;
           vehicle_year?: string | null;
+          vehicle_vin?: string;
           notes?: string | null;
           service_id?: string;
           requested_date?: string;
@@ -150,6 +153,12 @@ export type Database = {
         Returns: void;
       };
       reject_appointment: {
+        Args: {
+          target_appointment_id: string;
+        };
+        Returns: void;
+      };
+      complete_appointment: {
         Args: {
           target_appointment_id: string;
         };

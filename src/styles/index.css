@@ -121,3 +121,8 @@ button {
   background: rgb(217 35 46 / 0.18);
   color: #ff8d94;
 }
+
+.status-completed {
+  background: rgb(255 255 255 / 0.14);
+  color: #f5f1ea;
+}

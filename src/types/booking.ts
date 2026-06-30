@@ -1,4 +1,4 @@
-export type AppointmentStatus = 'pending' | 'approved' | 'rejected';
+export type AppointmentStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 
 export type Service = {
   id: string;
@@ -16,7 +16,8 @@ export type AppointmentRequest = {
   email: string;
   vehicleBrand: string;
   vehicleModel: string;
-  vehicleYear?: string;
+  vehicleYear: string;
+  vehicleVin: string;
   notes?: string;
   serviceId: string;
   requestedDate: string;

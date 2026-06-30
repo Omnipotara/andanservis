@@ -75,6 +75,8 @@ export const getAvailableSlots = (
       email: '',
       vehicleBrand: '',
       vehicleModel: '',
+      vehicleYear: '',
+      vehicleVin: '',
       serviceId: service.id,
       requestedDate: date,
       requestedTime: minutesToTime(value),
@@ -98,4 +100,5 @@ export const statusLabel = {
   pending: 'Na čekanju',
   approved: 'Odobreno',
   rejected: 'Odbijeno',
+  completed: 'Završeno',
 } as const;

@@ -5,13 +5,17 @@ Create a Supabase project, then run the SQL in:
 
 `supabase/migrations/20260630133000_initial_schema.sql`
 
+If the project already exists, also run:
+
+`supabase/migrations/20260701090000_booking_admin_updates.sql`
+
 The migration creates:
 - `services`
 - `appointments`
 - `business_settings`
 - `blocked_dates`
 - Row Level Security policies
-- `get_approved_appointment_slots`, `approve_appointment`, and `reject_appointment` RPC functions
+- `get_approved_appointment_slots`, `approve_appointment`, `reject_appointment`, and `complete_appointment` RPC functions
 
 ## Environment Variables
 Copy `.env.example` to `.env` and fill:
@@ -46,3 +50,5 @@ Public visitors can create pending appointment requests and read approved time s
 
 ## Booking Rule
 Pending requests do not block availability. Approved appointments block time. Calling `approve_appointment` approves one request and automatically rejects pending requests that overlap the approved occupied time.
+
+Admins can mark approved appointments as completed with `complete_appointment`. Public appointment requests require vehicle brand and model; year and chassis/VIN number are optional.

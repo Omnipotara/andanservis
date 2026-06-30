@@ -1,6 +1,6 @@
 create extension if not exists pgcrypto;
 
-create type appointment_status as enum ('pending', 'approved', 'rejected');
+create type appointment_status as enum ('pending', 'approved', 'rejected', 'completed');
 
 create table public.services (
   id uuid primary key default gen_random_uuid(),
@@ -39,6 +39,7 @@ create table public.appointments (
   vehicle_brand text not null,
   vehicle_model text not null,
   vehicle_year text,
+  vehicle_vin text not null,
   notes text,
   service_id uuid not null references public.services(id),
   requested_date date not null,
@@ -178,6 +179,24 @@ begin
 end;
 $$;
 
+create or replace function public.complete_appointment(target_appointment_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only admins can complete appointments';
+  end if;
+
+  update public.appointments
+  set status = 'completed'
+  where id = target_appointment_id
+    and status = 'approved';
+end;
+$$;
+
 create or replace function public.get_approved_appointment_slots()
 returns table (
   id uuid,
@@ -287,6 +306,14 @@ values
     'Poliranje i zaštita farova za bolju vidljivost i uredniji izgled vozila.',
     4500,
     75,
+    true
+  ),
+  (
+    'nista-od-navedenog',
+    'Ništa od navedenog',
+    'Pošaljite upit ako niste sigurni koju uslugu da izaberete.',
+    0,
+    30,
     true
   )
 on conflict (slug) do update

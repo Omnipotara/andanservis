@@ -28,6 +28,19 @@ const mapBusinessSettings = (settings: BusinessSettingsRow): BusinessSettings =>
   globalBufferMinutes: settings.global_buffer_minutes,
 });
 
+const normalizeServiceName = (value: string) => value.trim().toLocaleLowerCase('sr-RS');
+
+const withFallbackServices = (services: Service[]) => {
+  const existingServiceNames = new Set(
+    services.map((service) => normalizeServiceName(service.name)),
+  );
+  const missingFallbackServices = fallbackServices.filter(
+    (service) => !existingServiceNames.has(normalizeServiceName(service.name)),
+  );
+
+  return [...services, ...missingFallbackServices];
+};
+
 const mapAppointment = (appointment: AppointmentRow): AppointmentRequest => ({
   id: appointment.id,
   customerName: appointment.customer_name,
@@ -35,7 +48,8 @@ const mapAppointment = (appointment: AppointmentRow): AppointmentRequest => ({
   email: appointment.email,
   vehicleBrand: appointment.vehicle_brand,
   vehicleModel: appointment.vehicle_model,
-  vehicleYear: appointment.vehicle_year ?? undefined,
+  vehicleYear: appointment.vehicle_year ?? '',
+  vehicleVin: appointment.vehicle_vin,
   notes: appointment.notes ?? undefined,
   serviceId: appointment.service_id,
   requestedDate: appointment.requested_date,
@@ -51,6 +65,7 @@ const toAppointmentInsert = (request: BookingRequestInput): AppointmentInsert =>
   vehicle_brand: request.vehicleBrand,
   vehicle_model: request.vehicleModel,
   vehicle_year: request.vehicleYear ?? null,
+  vehicle_vin: request.vehicleVin,
   notes: request.notes ?? null,
   service_id: request.serviceId,
   requested_date: request.requestedDate,
@@ -73,7 +88,7 @@ export const getServices = async () => {
     throw error;
   }
 
-  return data.map(mapService);
+  return withFallbackServices(data.map(mapService));
 };
 
 export const getBusinessSettings = async () => {
@@ -129,6 +144,8 @@ export const getApprovedAppointmentSlots = async (): Promise<AppointmentRequest[
     email: '',
     vehicleBrand: '',
     vehicleModel: '',
+    vehicleYear: '',
+    vehicleVin: '',
     serviceId: appointment.service_id,
     requestedDate: appointment.requested_date,
     requestedTime: normalizeTime(appointment.requested_time),
@@ -169,6 +186,20 @@ export const rejectAppointmentRequest = async (appointmentId: string) => {
   }
 
   const { error } = await supabase.rpc('reject_appointment', {
+    target_appointment_id: appointmentId,
+  });
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const completeAppointmentRequest = async (appointmentId: string) => {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.rpc('complete_appointment', {
     target_appointment_id: appointmentId,
   });
 

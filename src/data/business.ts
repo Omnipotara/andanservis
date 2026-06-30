@@ -4,12 +4,13 @@ export const businessDetails = {
   name: 'Andan Autoservis',
   city: 'Nova Pazova',
   country: 'Srbija',
-  phone: 'Telefon uskoro',
+  phone: '+381 63 8207512',
   email: 'Email uskoro',
   address: 'Adresa uskoro',
   mapsUrl: '#',
+  whatsappUrl:
+    'https://wa.me/381638207512?text=Zdravo%2C%20%C5%BEelim%20da%20zaka%C5%BEem%20servis%20u%20Andan%20Autoservisu.',
   serviceArea: 'Nova Pazova i okolina',
-  tone: 'Profesionalno, pouzdano, moderno',
 };
 
 export const businessSettings: BusinessSettings = {
@@ -49,6 +50,14 @@ export const services: Service[] = [
     description: 'Poliranje i zaštita farova za bolju vidljivost i uredniji izgled vozila.',
     fixedPrice: 4500,
     durationMinutes: 75,
+    isActive: true,
+  },
+  {
+    id: 'nista-od-navedenog',
+    name: 'Ništa od navedenog',
+    description: 'Pošaljite upit ako niste sigurni koju uslugu da izaberete.',
+    fixedPrice: 0,
+    durationMinutes: 30,
     isActive: true,
   },
 ];
