@@ -13,7 +13,6 @@ import {
   Menu,
   Phone,
   ScanSearch,
-  ShieldCheck,
   Wrench,
   X,
   type LucideIcon,
@@ -64,19 +63,19 @@ const priceInquiryServiceSlug = 'nista-od-navedenog';
 
 const heroHighlights = [
   {
-    title: 'Jasan zahtev',
-    text: 'Pošaljite podatke i servis pregleda upit.',
-    icon: ShieldCheck,
-  },
-  {
-    title: 'Kontrola termina',
-    text: 'Termin je zauzet tek kada ga admin odobri.',
+    title: '1. Pošaljite zahtev',
+    text: 'Rezervišite termin ili pošaljite upit našem servisu.',
     icon: CalendarCheck,
   },
   {
-    title: 'Lokalni servis',
-    text: 'Fokus na Novu Pazovu i okolinu.',
-    icon: MapPin,
+    title: '2. Dobijate potvrdu',
+    text: 'Servis vas kontaktira sa informacijama, cenom i potvrdom termina.',
+    icon: Phone,
+  },
+  {
+    title: '3. Dolazite u servis',
+    text: 'Dovezite vozilo u dogovorenom terminu, a mi rešavamo problem.',
+    icon: Wrench,
   },
 ];
 
@@ -815,8 +814,9 @@ function App() {
               </p>
               <h2 className="mt-3 text-4xl font-black sm:text-5xl">Pošalji zahtev za termin.</h2>
               <p className="mt-5 text-base leading-7 text-black/64">
-                Slobodni termini se računaju samo prema odobrenim zakazivanjima. Više klijenata
-                može poslati zahtev za isti termin, a potvrda stiže tek nakon pregleda servisa.
+                Zakazivanje termina u Andan Autoservisu je jednostavno: izaberite uslugu,
+                unesite podatke o vozilu i pošaljite zahtev. Servis u Novoj Pazovi pregleda upit
+                i javlja vam se sa potvrdom termina ili dodatnim informacijama.
               </p>
             </div>
 
@@ -1137,10 +1137,10 @@ function App() {
           <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_1fr] lg:px-8">
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-ember">Kontakt</p>
-              <h2 className="mt-3 text-4xl font-black sm:text-5xl">Detalji se dodaju iz jednog izvora.</h2>
+              <h2 className="mt-3 text-4xl font-black sm:text-5xl">Tu smo za vaš sledeći servis.</h2>
               <p className="mt-5 text-base leading-7 text-black/64">
-                Podaci za telefon, adresu, radno vreme, logo i boje trenutno čekaju unos u
-                dokumentu poslovnih detalja. Kada se popuni, isti podaci se prenose kroz ceo sajt.
+                Ako vam je potreban termin, procena kvara ili dodatna informacija, pozovite Andan
+                Autoservis, pošaljite WhatsApp poruku ili pošaljite upit preko sajta.
               </p>
             </div>
             <div className="grid gap-3">
