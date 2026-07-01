@@ -64,7 +64,7 @@ export const getAvailableSlots = (
   const slotInterval = 30;
   const start = timeToMinutes(businessSettings.workdayStart);
   const end = timeToMinutes(businessSettings.workdayEnd);
-  const required = service.durationMinutes + businessSettings.globalBufferMinutes;
+  const required = (service.durationMinutes ?? 60) + businessSettings.globalBufferMinutes;
   const approvedAppointments = appointments.filter((appointment) => appointment.status === 'approved');
 
   for (let value = start; value + required <= end; value += slotInterval) {

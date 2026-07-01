@@ -22,6 +22,7 @@ export const businessSettings: BusinessSettings = {
 export const services: Service[] = [
   {
     id: 'mali-servis',
+    slug: 'mali-servis',
     name: 'Mali servis',
     description: 'Zamena ulja i filtera uz osnovnu kontrolu vozila pre povratka na put.',
     fixedPrice: 8500,
@@ -30,6 +31,7 @@ export const services: Service[] = [
   },
   {
     id: 'dijagnostika',
+    slug: 'dijagnostika',
     name: 'Auto dijagnostika',
     description: 'Precizno očitavanje grešaka i pregled sistema pre većih intervencija.',
     fixedPrice: 3500,
@@ -38,6 +40,7 @@ export const services: Service[] = [
   },
   {
     id: 'kocnice',
+    slug: 'kocnice',
     name: 'Zamena kočnica',
     description: 'Pregled i zamena diskova, pločica i pratećih elemenata kočionog sistema.',
     fixedPrice: 6000,
@@ -46,6 +49,7 @@ export const services: Service[] = [
   },
   {
     id: 'farovi',
+    slug: 'farovi',
     name: 'Čišćenje farova',
     description: 'Poliranje i zaštita farova za bolju vidljivost i uredniji izgled vozila.',
     fixedPrice: 4500,
@@ -54,6 +58,7 @@ export const services: Service[] = [
   },
   {
     id: 'nista-od-navedenog',
+    slug: 'nista-od-navedenog',
     name: 'Ništa od navedenog',
     description: 'Pošaljite upit ako niste sigurni koju uslugu da izaberete.',
     fixedPrice: 0,

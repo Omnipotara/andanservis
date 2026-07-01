@@ -2,10 +2,11 @@ export type AppointmentStatus = 'pending' | 'approved' | 'rejected' | 'completed
 
 export type Service = {
   id: string;
+  slug: string;
   name: string;
   description: string;
-  fixedPrice: number;
-  durationMinutes: number;
+  fixedPrice?: number;
+  durationMinutes?: number;
   isActive: boolean;
 };
 

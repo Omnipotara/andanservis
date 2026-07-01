@@ -11,8 +11,9 @@ Sections:
 Admin can:
 - Approve/reject requests
 - Add/edit services
-- Change labor prices
-- Change service duration
 - Change global buffer
 - Change working hours
 - Block dates
+- Open request details to view phone, email, vehicle details, date, time, and notes
+- Mark approved requests as completed
+- Filter requests by pending, approved, completed, and rejected status

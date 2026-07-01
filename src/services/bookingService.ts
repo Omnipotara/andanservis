@@ -5,20 +5,18 @@ import type { AppointmentRequest, BusinessSettings, Service } from '../types/boo
 import type { Database } from '../types/database';
 
 type AppointmentRow = Database['public']['Tables']['appointments']['Row'];
-type AppointmentInsert = Database['public']['Tables']['appointments']['Insert'];
 type BusinessSettingsRow = Database['public']['Tables']['business_settings']['Row'];
-type ServiceRow = Database['public']['Tables']['services']['Row'];
+type PublicServiceRow = Database['public']['Functions']['get_public_services']['Returns'][number];
 
 export type BookingRequestInput = Omit<AppointmentRequest, 'id' | 'status' | 'createdAt'>;
 
 const normalizeTime = (time: string) => time.slice(0, 5);
 
-const mapService = (service: ServiceRow): Service => ({
+const mapPublicService = (service: PublicServiceRow): Service => ({
   id: service.id,
+  slug: service.slug,
   name: service.name,
   description: service.description,
-  fixedPrice: service.fixed_price,
-  durationMinutes: service.duration_minutes,
   isActive: service.is_active,
 });
 
@@ -28,19 +26,6 @@ const mapBusinessSettings = (settings: BusinessSettingsRow): BusinessSettings =>
   globalBufferMinutes: settings.global_buffer_minutes,
 });
 
-const normalizeServiceName = (value: string) => value.trim().toLocaleLowerCase('sr-RS');
-
-const withFallbackServices = (services: Service[]) => {
-  const existingServiceNames = new Set(
-    services.map((service) => normalizeServiceName(service.name)),
-  );
-  const missingFallbackServices = fallbackServices.filter(
-    (service) => !existingServiceNames.has(normalizeServiceName(service.name)),
-  );
-
-  return [...services, ...missingFallbackServices];
-};
-
 const mapAppointment = (appointment: AppointmentRow): AppointmentRequest => ({
   id: appointment.id,
   customerName: appointment.customer_name,
@@ -49,7 +34,7 @@ const mapAppointment = (appointment: AppointmentRow): AppointmentRequest => ({
   vehicleBrand: appointment.vehicle_brand,
   vehicleModel: appointment.vehicle_model,
   vehicleYear: appointment.vehicle_year ?? '',
-  vehicleVin: appointment.vehicle_vin,
+  vehicleVin: appointment.vehicle_vin ?? '',
   notes: appointment.notes ?? undefined,
   serviceId: appointment.service_id,
   requestedDate: appointment.requested_date,
@@ -58,37 +43,18 @@ const mapAppointment = (appointment: AppointmentRow): AppointmentRequest => ({
   createdAt: appointment.created_at,
 });
 
-const toAppointmentInsert = (request: BookingRequestInput): AppointmentInsert => ({
-  customer_name: request.customerName,
-  phone: request.phone,
-  email: request.email,
-  vehicle_brand: request.vehicleBrand,
-  vehicle_model: request.vehicleModel,
-  vehicle_year: request.vehicleYear ?? null,
-  vehicle_vin: request.vehicleVin,
-  notes: request.notes ?? null,
-  service_id: request.serviceId,
-  requested_date: request.requestedDate,
-  requested_time: request.requestedTime,
-  status: 'pending',
-});
-
 export const getServices = async () => {
   if (!supabase) {
     return fallbackServices;
   }
 
-  const { data, error } = await supabase
-    .from('services')
-    .select('*')
-    .eq('is_active', true)
-    .order('created_at', { ascending: true });
+  const { data, error } = await supabase.rpc('get_public_services');
 
   if (error) {
     throw error;
   }
 
-  return withFallbackServices(data.map(mapService));
+  return data.map(mapPublicService);
 };
 
 export const getBusinessSettings = async () => {
@@ -154,12 +120,41 @@ export const getApprovedAppointmentSlots = async (): Promise<AppointmentRequest[
   }));
 };
 
+export const getAvailableAppointmentSlots = async (serviceId: string, requestedDate: string) => {
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc('get_available_appointment_slots', {
+    p_requested_date: requestedDate,
+    p_service_id: serviceId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data.map((slot) => normalizeTime(slot.available_time));
+};
+
 export const createAppointmentRequest = async (request: BookingRequestInput) => {
   if (!supabase) {
     return;
   }
 
-  const { error } = await supabase.from('appointments').insert(toAppointmentInsert(request));
+  const { error } = await supabase.rpc('create_appointment_request', {
+    p_customer_name: request.customerName,
+    p_email: request.email,
+    p_notes: request.notes ?? null,
+    p_phone: request.phone,
+    p_requested_date: request.requestedDate,
+    p_requested_time: request.requestedTime,
+    p_service_id: request.serviceId,
+    p_vehicle_brand: request.vehicleBrand,
+    p_vehicle_model: request.vehicleModel,
+    p_vehicle_vin: request.vehicleVin || null,
+    p_vehicle_year: request.vehicleYear || null,
+  });
 
   if (error) {
     throw error;

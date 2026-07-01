@@ -37,6 +37,7 @@ import {
   createAppointmentRequest,
   getAdminAppointments,
   getApprovedAppointmentSlots,
+  getAvailableAppointmentSlots,
   getBusinessSettings,
   getServices,
   isSupabaseConfigured,
@@ -58,6 +59,8 @@ const navItems = [
 ];
 
 const adminPath = '/andanadminstrana';
+const priceInquiryOptionValue = '__price_inquiry__';
+const priceInquiryServiceSlug = 'nista-od-navedenog';
 
 const heroHighlights = [
   {
@@ -77,7 +80,23 @@ const heroHighlights = [
   },
 ];
 
-const today = new Date().toISOString().slice(0, 10);
+const formatInputDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+const addDays = (date: Date, days: number) => {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+};
+
+const today = formatInputDate(new Date());
+const minimumRequestDate = formatInputDate(addDays(new Date(), 1));
+const priceInquiryRequestDate = formatInputDate(addDays(new Date(), 2));
 
 type BookingForm = {
   serviceId: string;
@@ -100,7 +119,7 @@ type AdminLoginForm = {
 
 const emptyForm: BookingForm = {
   serviceId: fallbackServices[0]?.id ?? '',
-  requestedDate: today,
+  requestedDate: minimumRequestDate,
   requestedTime: '',
   customerName: '',
   phone: '',
@@ -129,6 +148,28 @@ const scrollToSection = (id: string) => {
 };
 
 const normalizeServiceName = (value: string) => value.trim().toLocaleLowerCase('sr-RS');
+
+const isUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+const isBookingStartAllowed = (date: string, time: string) => {
+  const [year, month, day] = date.split('-').map(Number);
+  const [hours, minutes] = time.split(':').map(Number);
+
+  if (!year || !month || !day || Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return false;
+  }
+
+  if (date <= today) {
+    return false;
+  }
+
+  const bookingStart = new Date(year, month - 1, day, hours, minutes);
+  const minimumStart = new Date();
+  minimumStart.setHours(minimumStart.getHours() + 12);
+
+  return bookingStart >= minimumStart;
+};
 
 const formatDisplayDate = (date: string) => {
   const [year, month, day] = date.split('-').map(Number);
@@ -175,6 +216,7 @@ function App() {
   const [appointments, setAppointments] = useState<AppointmentRequest[]>(initialAppointments);
   const [availabilityAppointments, setAvailabilityAppointments] =
     useState<AppointmentRequest[]>(initialAppointments);
+  const [remoteAvailableSlots, setRemoteAvailableSlots] = useState<string[]>([]);
   const [form, setForm] = useState<BookingForm>(emptyForm);
   const [backendStatus, setBackendStatus] = useState(
     isSupabaseConfigured ? 'Sistem za zakazivanje se učitava...' : 'Lokalni pregled je aktivan.',
@@ -193,9 +235,9 @@ function App() {
   const [expandedAppointmentId, setExpandedAppointmentId] = useState<string | null>(null);
   const selectedService =
     appServices.find((service) => service.id === form.serviceId) ?? appServices[0];
-  const publicServices = appServices.filter(
-    (service) => normalizeServiceName(service.name) !== 'ništa od navedenog',
-  );
+  const priceInquiryService = appServices.find((service) => service.slug === priceInquiryServiceSlug);
+  const isPriceInquiry = form.serviceId === priceInquiryOptionValue;
+  const publicServices = appServices.filter((service) => service.slug !== priceInquiryServiceSlug);
   const canManageAppointments = !isSupabaseConfigured || Boolean(adminUser);
 
   useEffect(() => {
@@ -256,9 +298,42 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured || !selectedService || isPriceInquiry) {
+      setRemoteAvailableSlots([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadAvailableSlots = async () => {
+      try {
+        const slots = await getAvailableAppointmentSlots(selectedService.id, form.requestedDate);
+
+        if (isMounted) {
+          setRemoteAvailableSlots(slots);
+        }
+      } catch {
+        if (isMounted) {
+          setRemoteAvailableSlots([]);
+        }
+      }
+    };
+
+    void loadAvailableSlots();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [form.requestedDate, isPriceInquiry, selectedService]);
+
   const availableSlots = useMemo(() => {
-    if (!selectedService) {
+    if (!selectedService || isPriceInquiry) {
       return [];
+    }
+
+    if (isSupabaseConfigured) {
+      return remoteAvailableSlots;
     }
 
     return getAvailableSlots(
@@ -267,8 +342,27 @@ function App() {
       availabilityAppointments,
       businessSettings,
       appServices,
-    );
-  }, [appServices, availabilityAppointments, businessSettings, form.requestedDate, selectedService]);
+    ).filter((slot) => isBookingStartAllowed(form.requestedDate, slot));
+  }, [
+    appServices,
+    availabilityAppointments,
+    businessSettings,
+    form.requestedDate,
+    isPriceInquiry,
+    remoteAvailableSlots,
+    selectedService,
+  ]);
+
+  useEffect(() => {
+    if (isPriceInquiry || !form.requestedTime || availableSlots.includes(form.requestedTime)) {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      requestedTime: '',
+    }));
+  }, [availableSlots, form.requestedTime, isPriceInquiry]);
 
   const pendingCount = appointments.filter((appointment) => appointment.status === 'pending').length;
   const approvedCount = appointments.filter((appointment) => appointment.status === 'approved').length;
@@ -354,6 +448,36 @@ function App() {
     event.preventDefault();
     setIsSubmitting(true);
 
+    if (isPriceInquiry && !priceInquiryService) {
+      setBackendStatus('Upit za cenu trenutno nije dostupan. Pokušaj ponovo kasnije.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (isPriceInquiry && (!form.vehicleYear.trim() || !form.vehicleVin.trim())) {
+      setBackendStatus('Za upit za cenu unesite godište i broj šasije.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!isPriceInquiry && !isBookingStartAllowed(form.requestedDate, form.requestedTime)) {
+      setBackendStatus('Izaberite termin koji nije danas i koji je najmanje 12 sati unapred.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (isSupabaseConfigured && !isUuid(isPriceInquiry ? priceInquiryService?.id ?? '' : form.serviceId)) {
+      setBackendStatus('Usluge se još učitavaju. Osvežite stranicu i pokušajte ponovo.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const requestDate = isPriceInquiry ? priceInquiryRequestDate : form.requestedDate;
+    const requestTime = isPriceInquiry ? '08:00' : form.requestedTime;
+    const requestNotes = isPriceInquiry
+      ? ['Upit za cenu.', form.notes.trim()].filter(Boolean).join(' ')
+      : form.notes || undefined;
+
     const request: AppointmentRequest = {
       id: `REQ-${Math.floor(2000 + Math.random() * 7000)}`,
       customerName: form.customerName,
@@ -363,10 +487,10 @@ function App() {
       vehicleModel: form.vehicleModel,
       vehicleYear: form.vehicleYear,
       vehicleVin: form.vehicleVin,
-      notes: form.notes || undefined,
-      serviceId: form.serviceId,
-      requestedDate: form.requestedDate,
-      requestedTime: form.requestedTime,
+      notes: requestNotes,
+      serviceId: isPriceInquiry ? priceInquiryService?.id ?? form.serviceId : form.serviceId,
+      requestedDate: requestDate,
+      requestedTime: requestTime,
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
@@ -378,7 +502,7 @@ function App() {
       setForm((current) => ({
         ...emptyForm,
         serviceId: appServices[0]?.id ?? current.serviceId,
-        requestedDate: today,
+        requestedDate: minimumRequestDate,
       }));
       setBackendStatus(
         isSupabaseConfigured
@@ -701,37 +825,45 @@ function App() {
                 <label className="field md:col-span-2">
                   Usluga
                   <select value={form.serviceId} onChange={(event) => updateForm('serviceId', event.target.value)}>
-                    {appServices.map((service) => (
+                    {publicServices.map((service) => (
                       <option key={service.id} value={service.id}>
                         {service.name}
                       </option>
                     ))}
+                    <option disabled value="">
+                      ━━━━━━━━━━━━━━━━━━━
+                    </option>
+                    <option value={priceInquiryOptionValue}>Upit za cenu</option>
                   </select>
                 </label>
-                <label className="field">
-                  Datum
-                  <input
-                    min={today}
-                    type="date"
-                    value={form.requestedDate}
-                    onChange={(event) => updateForm('requestedDate', event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Termin
-                  <select
-                    required
-                    value={form.requestedTime}
-                    onChange={(event) => updateForm('requestedTime', event.target.value)}
-                  >
-                    <option value="">Izaberite vreme</option>
-                    {availableSlots.map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {!isPriceInquiry && (
+                  <>
+                    <label className="field">
+                      Datum
+                      <input
+                        min={minimumRequestDate}
+                        type="date"
+                        value={form.requestedDate}
+                        onChange={(event) => updateForm('requestedDate', event.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      Termin
+                      <select
+                        required
+                        value={form.requestedTime}
+                        onChange={(event) => updateForm('requestedTime', event.target.value)}
+                      >
+                        <option value="">Izaberite vreme</option>
+                        {availableSlots.map((slot) => (
+                          <option key={slot} value={slot}>
+                            {slot}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                )}
 
                 <fieldset className="grid gap-4 border-t border-black/10 pt-5 md:col-span-2 md:grid-cols-2">
                   <legend className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-steel">
@@ -764,12 +896,20 @@ function App() {
                     <input required value={form.vehicleModel} onChange={(event) => updateForm('vehicleModel', event.target.value)} />
                   </label>
                   <label className="field">
-                    Godište (opcionalno)
-                    <input value={form.vehicleYear} onChange={(event) => updateForm('vehicleYear', event.target.value)} />
+                    {isPriceInquiry ? 'Godište' : 'Godište (opcionalno)'}
+                    <input
+                      required={isPriceInquiry}
+                      value={form.vehicleYear}
+                      onChange={(event) => updateForm('vehicleYear', event.target.value)}
+                    />
                   </label>
                   <label className="field">
-                    Broj šasije (opcionalno)
-                    <input value={form.vehicleVin} onChange={(event) => updateForm('vehicleVin', event.target.value)} />
+                    {isPriceInquiry ? 'Broj šasije' : 'Broj šasije (opcionalno)'}
+                    <input
+                      required={isPriceInquiry}
+                      value={form.vehicleVin}
+                      onChange={(event) => updateForm('vehicleVin', event.target.value)}
+                    />
                   </label>
                 </fieldset>
 
@@ -887,6 +1027,8 @@ function App() {
                 <div className="mt-6 grid gap-4">
               {filteredAppointments.map((appointment) => {
                 const service = getService(appointment.serviceId, appServices);
+                const appointmentIsPriceInquiry = service?.slug === priceInquiryServiceSlug;
+                const appointmentKind = appointmentIsPriceInquiry ? 'Upit za cenu' : service?.name;
                 const isExpanded = expandedAppointmentId === appointment.id;
 
                 return (
@@ -900,8 +1042,10 @@ function App() {
                           </span>
                         </div>
                         <p className="mt-2 text-sm leading-6 text-white/68">
-                          {service?.name} · {formatDisplayDate(appointment.requestedDate)} u{' '}
-                          {appointment.requestedTime} ·{' '}
+                          {appointmentKind}
+                          {!appointmentIsPriceInquiry &&
+                            ` · ${formatDisplayDate(appointment.requestedDate)} u ${appointment.requestedTime}`}
+                          {' · '}
                           {appointment.vehicleBrand} {appointment.vehicleModel}
                         </p>
                       </div>
@@ -959,8 +1103,12 @@ function App() {
                         <AdminDetail label="Model" value={appointment.vehicleModel} />
                         <AdminDetail label="Godište" value={appointment.vehicleYear || 'Nije uneto'} />
                         <AdminDetail label="Broj šasije" value={appointment.vehicleVin || 'Nije uneto'} />
-                        <AdminDetail label="Datum" value={formatDisplayDate(appointment.requestedDate)} />
-                        <AdminDetail label="Termin" value={appointment.requestedTime} />
+                        {!appointmentIsPriceInquiry && (
+                          <>
+                            <AdminDetail label="Datum" value={formatDisplayDate(appointment.requestedDate)} />
+                            <AdminDetail label="Termin" value={appointment.requestedTime} />
+                          </>
+                        )}
                         <AdminDetail
                           label="Napomena"
                           value={appointment.notes || 'Nema napomene'}

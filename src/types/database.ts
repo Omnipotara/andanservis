@@ -14,7 +14,7 @@ export type Database = {
           vehicle_brand: string;
           vehicle_model: string;
           vehicle_year: string | null;
-          vehicle_vin: string;
+          vehicle_vin: string | null;
           notes: string | null;
           service_id: string;
           requested_date: string;
@@ -31,7 +31,7 @@ export type Database = {
           vehicle_brand: string;
           vehicle_model: string;
           vehicle_year?: string | null;
-          vehicle_vin: string;
+          vehicle_vin?: string | null;
           notes?: string | null;
           service_id: string;
           requested_date: string;
@@ -47,7 +47,7 @@ export type Database = {
           vehicle_brand?: string;
           vehicle_model?: string;
           vehicle_year?: string | null;
-          vehicle_vin?: string;
+          vehicle_vin?: string | null;
           notes?: string | null;
           service_id?: string;
           requested_date?: string;
@@ -152,6 +152,22 @@ export type Database = {
         };
         Returns: void;
       };
+      create_appointment_request: {
+        Args: {
+          p_customer_name: string;
+          p_email: string;
+          p_notes: string | null;
+          p_phone: string;
+          p_requested_date: string;
+          p_requested_time: string;
+          p_service_id: string;
+          p_vehicle_brand: string;
+          p_vehicle_model: string;
+          p_vehicle_vin: string | null;
+          p_vehicle_year: string | null;
+        };
+        Returns: string;
+      };
       reject_appointment: {
         Args: {
           target_appointment_id: string;
@@ -172,6 +188,25 @@ export type Database = {
           requested_date: string;
           requested_time: string;
           created_at: string;
+        }[];
+      };
+      get_available_appointment_slots: {
+        Args: {
+          p_requested_date: string;
+          p_service_id: string;
+        };
+        Returns: {
+          available_time: string;
+        }[];
+      };
+      get_public_services: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          id: string;
+          slug: string;
+          name: string;
+          description: string;
+          is_active: boolean;
         }[];
       };
       current_user_is_admin: {
