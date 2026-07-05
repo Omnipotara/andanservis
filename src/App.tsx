@@ -96,6 +96,11 @@ const addDays = (date: Date, days: number) => {
 const today = formatInputDate(new Date());
 const minimumRequestDate = formatInputDate(addDays(new Date(), 1));
 const priceInquiryRequestDate = formatInputDate(addDays(new Date(), 2));
+const vehicleYearOptions = [
+  'Ne znam tačno',
+  'Starije od 2000.',
+  ...Array.from({ length: 27 }, (_, index) => (2000 + index).toString()),
+];
 
 type BookingForm = {
   serviceId: string;
@@ -114,6 +119,16 @@ type BookingForm = {
 type AdminLoginForm = {
   email: string;
   password: string;
+};
+
+type CarBrandModelEntry = {
+  brand: string;
+  slug: string;
+  models: string[];
+};
+
+type CarBrandsPayload = {
+  brands?: CarBrandModelEntry[];
 };
 
 const emptyForm: BookingForm = {
@@ -217,6 +232,8 @@ function App() {
     useState<AppointmentRequest[]>(initialAppointments);
   const [remoteAvailableSlots, setRemoteAvailableSlots] = useState<string[]>([]);
   const [form, setForm] = useState<BookingForm>(emptyForm);
+  const [carBrands, setCarBrands] = useState<CarBrandModelEntry[]>([]);
+  const [carBrandsLoaded, setCarBrandsLoaded] = useState(false);
   const [backendStatus, setBackendStatus] = useState(
     isSupabaseConfigured ? 'Sistem za zakazivanje se učitava...' : 'Lokalni pregled je aktivan.',
   );
@@ -237,7 +254,47 @@ function App() {
   const priceInquiryService = appServices.find((service) => service.slug === priceInquiryServiceSlug);
   const isPriceInquiry = form.serviceId === priceInquiryOptionValue;
   const publicServices = appServices.filter((service) => service.slug !== priceInquiryServiceSlug);
+  const selectedCarBrand = carBrands.find((entry) => entry.brand === form.vehicleBrand);
+  const availableCarModels = selectedCarBrand?.models ?? [];
   const canManageAppointments = !isSupabaseConfigured || Boolean(adminUser);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCarBrands = async () => {
+      try {
+        const response = await fetch('/car-brands-models.json');
+
+        if (!response.ok) {
+          throw new Error('Car brand data is not available.');
+        }
+
+        const data = (await response.json()) as CarBrandsPayload;
+        const validBrands = (data.brands ?? []).filter(
+          (entry): entry is CarBrandModelEntry =>
+            Boolean(entry.brand) && Boolean(entry.slug) && Array.isArray(entry.models),
+        );
+
+        if (isMounted) {
+          setCarBrands(validBrands);
+        }
+      } catch {
+        if (isMounted) {
+          setCarBrands([]);
+        }
+      } finally {
+        if (isMounted) {
+          setCarBrandsLoaded(true);
+        }
+      }
+    };
+
+    void loadCarBrands();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -390,6 +447,7 @@ function App() {
       ...current,
       [key]: value,
       ...(key === 'serviceId' || key === 'requestedDate' ? { requestedTime: '' } : {}),
+      ...(key === 'vehicleBrand' ? { vehicleModel: '' } : {}),
     }));
   };
 
@@ -889,19 +947,57 @@ function App() {
                   </legend>
                   <label className="field">
                     Marka vozila
-                    <input required value={form.vehicleBrand} onChange={(event) => updateForm('vehicleBrand', event.target.value)} />
+                    <select
+                      required
+                      value={form.vehicleBrand}
+                      onChange={(event) => updateForm('vehicleBrand', event.target.value)}
+                    >
+                      <option value="">
+                        {carBrandsLoaded ? 'Izaberite marku' : 'Učitavanje marki...'}
+                      </option>
+                      {carBrands.map((entry) => (
+                        <option key={entry.slug} value={entry.brand}>
+                          {entry.brand}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="field">
                     Model
-                    <input required value={form.vehicleModel} onChange={(event) => updateForm('vehicleModel', event.target.value)} />
+                    <select
+                      disabled={!form.vehicleBrand || availableCarModels.length === 0}
+                      required
+                      value={form.vehicleModel}
+                      onChange={(event) => updateForm('vehicleModel', event.target.value)}
+                    >
+                      <option value="">
+                        {!form.vehicleBrand
+                          ? 'Prvo izaberite marku'
+                          : availableCarModels.length > 0
+                            ? 'Izaberite model'
+                            : 'Modeli nisu dostupni'}
+                      </option>
+                      {availableCarModels.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="field">
-                    {isPriceInquiry ? 'Godište' : 'Godište (opcionalno)'}
-                    <input
-                      required={isPriceInquiry}
+                    Godište
+                    <select
+                      required
                       value={form.vehicleYear}
                       onChange={(event) => updateForm('vehicleYear', event.target.value)}
-                    />
+                    >
+                      <option value="">Izaberite godište</option>
+                      {vehicleYearOptions.map((yearOption) => (
+                        <option key={yearOption} value={yearOption}>
+                          {yearOption}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="field">
                     {isPriceInquiry ? 'Broj šasije' : 'Broj šasije (opcionalno)'}
