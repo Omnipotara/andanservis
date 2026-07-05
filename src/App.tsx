@@ -53,7 +53,7 @@ import {
 const navItems = [
   { id: 'pocetna', label: 'Početna' },
   { id: 'usluge', label: 'Usluge' },
-  { id: 'zakazivanje', label: 'Zakazivanje' },
+  { id: 'zakazivanje', label: 'Zakazivanje i slanje upita' },
   { id: 'kontakt', label: 'Kontakt' },
 ];
 
@@ -256,6 +256,9 @@ function App() {
   const publicServices = appServices.filter((service) => service.slug !== priceInquiryServiceSlug);
   const selectedCarBrand = carBrands.find((entry) => entry.brand === form.vehicleBrand);
   const availableCarModels = selectedCarBrand?.models ?? [];
+  const displayedVehicleYearOptions = isPriceInquiry
+    ? vehicleYearOptions.filter((yearOption) => yearOption !== 'Ne znam tačno')
+    : vehicleYearOptions;
   const canManageAppointments = !isSupabaseConfigured || Boolean(adminUser);
 
   useEffect(() => {
@@ -868,13 +871,15 @@ function App() {
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-3xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-ember">
-                Zakazivanje
+                Zakazivanje i upiti
               </p>
-              <h2 className="mt-3 text-4xl font-black sm:text-5xl">Pošalji zahtev za termin.</h2>
+              <h2 className="mt-3 text-4xl font-black sm:text-5xl">
+                Zakazivanje i slanje upita
+              </h2>
               <p className="mt-5 text-base leading-7 text-black/64">
-                Zakazivanje termina u Andan Autoservisu je jednostavno: izaberite uslugu,
-                unesite podatke o vozilu i pošaljite zahtev. Servis u Novoj Pazovi pregleda upit
-                i javlja vam se sa potvrdom termina ili dodatnim informacijama.
+                Izaberite konkretnu uslugu za zakazivanje termina ili pošaljite upit ako vam je
+                potrebna procena, savet ili dodatna informacija o servisu vozila. Andan Autoservis
+                u Novoj Pazovi pregleda zahtev i javlja vam se sa sledećim korakom.
               </p>
             </div>
 
@@ -992,7 +997,7 @@ function App() {
                       onChange={(event) => updateForm('vehicleYear', event.target.value)}
                     >
                       <option value="">Izaberite godište</option>
-                      {vehicleYearOptions.map((yearOption) => (
+                      {displayedVehicleYearOptions.map((yearOption) => (
                         <option key={yearOption} value={yearOption}>
                           {yearOption}
                         </option>
