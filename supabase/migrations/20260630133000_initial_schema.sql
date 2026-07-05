@@ -1,8 +1,13 @@
 create extension if not exists pgcrypto;
 
-create type appointment_status as enum ('pending', 'approved', 'rejected', 'completed');
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'appointment_status') then
+    create type appointment_status as enum ('pending', 'approved', 'rejected', 'completed');
+  end if;
+end $$;
 
-create table public.services (
+create table if not exists public.services (
   id uuid primary key default gen_random_uuid(),
   slug text not null unique,
   name text not null,
@@ -14,7 +19,7 @@ create table public.services (
   updated_at timestamptz not null default now()
 );
 
-create table public.business_settings (
+create table if not exists public.business_settings (
   id boolean primary key default true,
   workday_start time not null default '08:00',
   workday_end time not null default '17:00',
@@ -24,14 +29,14 @@ create table public.business_settings (
   constraint business_settings_single_row check (id)
 );
 
-create table public.blocked_dates (
+create table if not exists public.blocked_dates (
   id uuid primary key default gen_random_uuid(),
   date date not null unique,
   reason text,
   created_at timestamptz not null default now()
 );
 
-create table public.appointments (
+create table if not exists public.appointments (
   id uuid primary key default gen_random_uuid(),
   customer_name text not null,
   phone text not null,
@@ -49,8 +54,8 @@ create table public.appointments (
   updated_at timestamptz not null default now()
 );
 
-create index appointments_status_date_idx on public.appointments (status, requested_date);
-create index appointments_service_date_time_idx on public.appointments (
+create index if not exists appointments_status_date_idx on public.appointments (status, requested_date);
+create index if not exists appointments_service_date_time_idx on public.appointments (
   service_id,
   requested_date,
   requested_time
@@ -66,13 +71,19 @@ begin
 end;
 $$;
 
+drop trigger if exists services_set_updated_at on public.services;
+
 create trigger services_set_updated_at
 before update on public.services
 for each row execute function public.set_updated_at();
 
+drop trigger if exists appointments_set_updated_at on public.appointments;
+
 create trigger appointments_set_updated_at
 before update on public.appointments
 for each row execute function public.set_updated_at();
+
+drop trigger if exists business_settings_set_updated_at on public.business_settings;
 
 create trigger business_settings_set_updated_at
 before update on public.business_settings
@@ -226,45 +237,65 @@ alter table public.appointments enable row level security;
 
 grant execute on function public.get_approved_appointment_slots() to anon, authenticated;
 
+drop policy if exists "Public can read active services" on public.services;
+
 create policy "Public can read active services"
 on public.services for select
 using (is_active = true);
+
+drop policy if exists "Admins can manage services" on public.services;
 
 create policy "Admins can manage services"
 on public.services for all
 using (public.is_admin())
 with check (public.is_admin());
 
+drop policy if exists "Public can read business settings" on public.business_settings;
+
 create policy "Public can read business settings"
 on public.business_settings for select
 using (true);
+
+drop policy if exists "Admins can manage business settings" on public.business_settings;
 
 create policy "Admins can manage business settings"
 on public.business_settings for all
 using (public.is_admin())
 with check (public.is_admin());
 
+drop policy if exists "Public can read blocked dates" on public.blocked_dates;
+
 create policy "Public can read blocked dates"
 on public.blocked_dates for select
 using (true);
+
+drop policy if exists "Admins can manage blocked dates" on public.blocked_dates;
 
 create policy "Admins can manage blocked dates"
 on public.blocked_dates for all
 using (public.is_admin())
 with check (public.is_admin());
 
+drop policy if exists "Guests can create pending appointment requests" on public.appointments;
+
 create policy "Guests can create pending appointment requests"
 on public.appointments for insert
 with check (status = 'pending');
+
+drop policy if exists "Admins can read appointments" on public.appointments;
 
 create policy "Admins can read appointments"
 on public.appointments for select
 using (public.is_admin());
 
+drop policy if exists "Admins can update appointments" on public.appointments;
+
 create policy "Admins can update appointments"
 on public.appointments for update
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "Admins can delete appointments" on public.appointments;
 
 create policy "Admins can delete appointments"
 on public.appointments for delete
